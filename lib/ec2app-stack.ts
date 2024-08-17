@@ -1,19 +1,26 @@
-import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import { Construct } from 'constructs';
+import { Stack, CfnOutput } from "aws-cdk-lib";
+import { Construct } from "constructs";
+import Ec2Construct from "./ec2/ec2-construct";
+import SecurityGroupConstruct from "./vpc/security-group-construct";
+import VpcConstruct from "./vpc/vpc-construct";
+import S3Construct from "./s3/s3-construct";
+import S3DeployConstruct from "./s3/s3-deploy-construct";
 
-export class Ec2AppStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
-    super(scope, id, props);
+export default class Ec2AppStack extends Stack {
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
+    const bucket = new S3Construct(this, 'S3Construct').bucket;
+    new S3DeployConstruct(this, 'S3DeployConstruct', bucket);
+    const vpc = new VpcConstruct(this, 'VpcConstruct');
+    const sg = new SecurityGroupConstruct(this, 'SGConstruct', vpc.vpc);
+    const ec2 = new Ec2Construct(this, 'Ec2Construct', vpc.vpc, sg.securityGroup, bucket.bucketName);
 
-    const queue = new sqs.Queue(this, 'Ec2AppQueue', {
-      visibilityTimeout: Duration.seconds(300)
+    new CfnOutput(this, 'PublicIp', {
+      value: `http://${ec2.instance.instancePublicIp}`
     });
 
-    const topic = new sns.Topic(this, 'Ec2AppTopic');
-
-    topic.addSubscription(new subs.SqsSubscription(queue));
+    new CfnOutput(this, 'BucketName', {
+      value: bucket.bucketName
+    });
   }
 }
